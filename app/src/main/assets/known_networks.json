@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "networks": [
+    {
+      "id": "home-start",
+      "ssid": "Xiaomi_*****",
+      "password": "********",
+      "baseUrl": "http://***.***.**.***:3000",
+      "updateEndpoint": "/api/update",
+      "timeoutMs": 5000,
+      "retries": 2
+    },
+    {
+      "id": "home-backup",
+      "ssid": "Xiaomi_*****",
+      "password": "********",
+      "baseUrl": "http://***.***.**.***:3000",
+      "updateEndpoint": "/api/update?mode=backup",
+      "timeoutMs": 5000,
+      "retries": 2
+    },
+    {
+      "id": "home-test",
+      "ssid": "Xiaomi_*****",
+      "password": "********",
+      "baseUrl": "http://***.***.**.***:3000",
+      "updateEndpoint": "/api/update?mode=test",
+      "timeoutMs": 5000,
+      "retries": 2
+    }
+  ]
+}
+
