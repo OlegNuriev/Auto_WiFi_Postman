@@ -1,228 +1,333 @@
-Автоматический Android-сервис, который:
+Отлично, давай сделаем **полноценный README**, чтобы любой (включая тебя через полгода 😄) понял, **как пользоваться приложением и что менять под свой JSON / сервер / Wi-Fi**.
 
-* сканирует Wi-Fi сети
-* находит **заранее известные SSID**
-* последовательно работает с ними
-* выполняет HTTP-запросы (локальные и без интернета)
-* корректно обрабатывает ошибки и ретраи
-* работает в фоне как ForegroundService
-
-## 📐 Архитектура (коротко)
-
-ForegroundService
-        │
-        ▼
-   Orchestrator
-        │
-        ├─▶ WifiScanner     — скан известных SSID
-        ├─▶ WifiConnector   — работа с активной Wi-Fi
-        ├─▶ LocalHttpClient — HTTP-запросы
-        └─▶ Repository      — known_networks.json
-```
-
-## ✅ Основная концепция 
-
-### 🔹 Вариант A — используемый в проекте (рекомендуемый)
-
-> ❗ **Все Wi-Fi сети должны быть заранее сохранены в системе Android**
-
-* Сети добавляются вручную в настройках устройства
-* Сеть может:
-
-    * не иметь интернета
-    * быть локальной (`192.168.x.x`)
-* Приложение **НЕ управляет подключением**, а работает с **активной Wi-Fi**
-
-📌 Это обеспечивает:
-
-* стабильность
-* отсутствие системных диалогов
-* корректную работу без `NET_CAPABILITY_INTERNET`
+Ниже — готовый `README.md`, можно **копировать целиком**.
 
 ---
 
-## 📶 Wi-Fi логика
+# Auto Wi-Fi Postman 🤖📡
 
-### Сканирование
+Android-приложение для автоматического и ручного подключения к Wi-Fi сетям и отправки HTTP-запросов на сервер после успешного подключения.
 
-Используется стандартный Wi-Fi scan:
+Поддерживает:
 
-* Проверяется `Location enabled`
-* Получаются `ScanResult`
-* Фильтруются только известные SSID
+* 🔁 **Автоматический режим** (фоновые циклы раз в час)
+* 🖐 **Ручной режим** (сканирование и выбор сети)
+* 📥 **Импорт списка сетей из JSON**
+* ⏱ Таймер ожидания между циклами
+* 🔔 Статусы и уведомления
 
-```text
-Raw scan → Filtered known SSIDs
+---
 
-### Подключение
+## 🧠 Общая архитектура
 
-Приложение:
+* **UI** — Jetpack Compose
+* **State** — `UiState` + `StateFlow`
+* **Логика** — `MainViewModel`
+* **Фоновая работа** — `AgentForegroundService`
+* **Оркестрация** — `Orchestrator`
+* **Сети** — `KnownNetwork`
+* **Импорт JSON** — `KnownNetworksJsonParser`
 
-* использует текущий network stack
-* не вызывает `WifiNetworkSpecifier`
-* не дергает систему
+---
 
-## 🌐 HTTP-работа
+## 📦 Формат данных (JSON)
 
-### LocalHttpClient
+### Текущий формат сети
 
-* Используется `HttpURLConnection`
-* Все запросы выполняются **НЕ на main thread**
-* Возвращается HTTP-код
+```kotlin
+data class KnownNetwork(
+    val id: String,
+    val ssid: String,
+    val password: String? = null,
+    val baseUrl: String,
+    val updateEndpoint: String,
+    val retries: Int = 2,
+    val timeoutMs: Long = 5_000
+)
+```
 
-Пример:
-
-```text
-HTTP code = 200
-HTTP code = 500
-
-### Endpoint пример
+### Пример JSON (по умолчанию)
 
 ```json
-{
-  "baseUrl": "http://000.000.00.000:3000",
-  "updateEndpoint": "/api/update",
-  "timeoutMs": 3000,
-  "retries": 2
-}
+[
+  {
+    "id": "home-start",
+    "ssid": "Xiaomi_AX3000",
+    "password": "12345678",
+    "baseUrl": "http://192.168.1.10",
+    "updateEndpoint": "/api/update",
+    "retries": 2,
+    "timeoutMs": 5000
+  }
+]
 ```
 
 ---
 
-## 🔁 Orchestrator — state machine
+## 🔧 Как использовать СВОЙ формат JSON
 
-```text
-SCANNING
-  ↓
-FOUND_NETWORKS
-  ↓
-CONNECTING
-  ↓
-DISCONNECT
-  ↓
-SLEEP
+### 1️⃣ Где менять парсинг JSON
+
+📍 **Файл**:
+
+```
+ui/parser/KnownNetworksJsonParser.kt
 ```
 
-### Поведение:
+Там находится логика:
 
-* для каждой сети:
+```kotlin
+fun parse(json: String): ImportResult
+```
 
-    * N попыток
-    * фиксированный timeout
-* HTTP `200` → SUCCESS
-* HTTP `>=400` → retry
-* после всех → FAILED
+### 2️⃣ Если ваш JSON отличается
 
----
-
-## 📁 known_networks.json
-
-📍 `app/src/main/assets/known_networks.json`
+Например, ваш JSON выглядит так:
 
 ```json
-{
-  "networks": [
-    {
-      "id": "home-start",
-      "ssid": "Xiaomi_AX3000",
-      "baseUrl": "http://000.000.00.000:3000",
-      "updateEndpoint": "/api/update",
-      "timeoutMs": 3000,
-      "retries": 2
-    },
-    {
-      "id": "home-backup",
-      "ssid": "Xiaomi_AX3000",
-      "baseUrl": "http://000.000.00.000:3000",
-      "updateEndpoint": "/api/update?mode=backup",
-      "timeoutMs": 4000,
-      "retries": 2
-    },
-    {
-      "id": "home-test",
-      "ssid": "Xiaomi_AX3000",
-      "baseUrl": "http://000.000.00.000:3000",
-      "updateEndpoint": "/api/update?mode=test",
-      "timeoutMs": 2000,
-      "retries": 2
-    }
-  ]
-}
+[
+  {
+    "wifi_name": "MyWiFi",
+    "wifi_pass": "qwerty",
+    "server": "192.168.0.100",
+    "endpoint": "/ping"
+  }
+]
+```
+
+Нужно:
+
+* либо создать **промежуточную DTO**
+* либо вручную маппить поля
+
+#### Пример маппинга:
+
+```kotlin
+KnownNetwork(
+    id = UUID.randomUUID().toString(),
+    ssid = dto.wifi_name,
+    password = dto.wifi_pass,
+    baseUrl = "http://${dto.server}",
+    updateEndpoint = dto.endpoint
+)
+```
+
+📌 **Меняется ТОЛЬКО парсер**, остальное приложение трогать не нужно.
+
+---
+
+## 📥 Импорт JSON
+
+* Доступен **всегда** в AUTO и MANUAL режимах
+* Кнопка — ⚙️ (шестерёнка)
+* Поддерживает повторный импорт (заменяет список сетей)
+
+📍 Импорт обрабатывается в:
+
+```
+MainViewModel → handleImport()
 ```
 
 ---
 
-## 🔐 Network Security Config
+## 📡 Разрешения Android (ОБЯЗАТЕЛЬНО)
 
-📍 `res/xml/network_security_config.xml`
+### 1️⃣ В `AndroidManifest.xml`
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.INTERNET" />
+
+<!-- Android 10+ -->
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```
+
+⚠️ **Без LOCATION Wi-Fi сканирование НЕ работает**
+
+---
+
+### 2️⃣ Разрешения в настройках телефона
+
+В настройках приложения **вручную включить**:
+
+* 📍 Геолокация → **Разрешить**
+* 📡 Wi-Fi
+* 🔋 Фоновая работа → **Разрешить**
+* 🔔 Уведомления (для Foreground Service)
+
+---
+
+## 🌐 HTTP (НЕ HTTPS)
+
+### Разрешение обычного HTTP
+
+📍 **Файл**:
+
+```
+res/xml/network_security_config.xml
+```
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">
-            000.000.00.000
-        </domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
 ```
 
-📌 Нужно для HTTP без HTTPS.
-
----
-
-## 📦 AndroidManifest.xml
-
-Ключевые моменты:
+📍 **AndroidManifest.xml**:
 
 ```xml
 <application
-    android:networkSecurityConfig="@xml/network_security_config">
-
-<uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-<uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-<uses-permission android:name="android.permission.INTERNET"/>
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    android:networkSecurityConfig="@xml/network_security_config"
+    android:usesCleartextTraffic="true"
+    ... >
 ```
 
 ---
 
-## 🧵 Потоки и корутины
+## 🤖 Автоматический режим (AUTO)
 
-* ❌ Нет сети на main thread
-* ❌ Нет `NetworkOnMainThreadException`
-* Все HTTP → `Dispatchers.IO`
-* Orchestrator — suspend-логика
+* Запускается через `ForegroundService`
+* Работает **даже если приложение свернуто**
+* Цикл:
 
-Успешный цикл выглядит так:
+    1. Сканирование Wi-Fi
+    2. Выбор лучшей сети из известных
+    3. Подключение
+    4. HTTP запрос
+    5. Ожидание 60 минут
 
-```text
-STATE → SCANNING
-STATE → FOUND_NETWORKS
-→ PROCESS home-start
-HTTP code = 200
-SUCCESS
-→ PROCESS home-backup
-HTTP code = 200
-SUCCESS
-→ PROCESS home-test
-HTTP code = 500
-FAILED after retries
-STATE → SLEEP
+📍 Логика:
+
+```
+AgentForegroundService
+Orchestrator
+```
+
+📍 Таймер:
+
+```
+MainViewModel → startAutoCountdown()
 ```
 
 ---
 
-## ⚠️ Ограничения 
-* ❌ Нельзя переключать Wi-Fi без участия пользователя (Android restriction)
-* ❌ Нельзя подключаться к неизвестным сетям
-* ❌ Нельзя управлять captive portal
+## 🖐 Ручной режим (MANUAL)
 
-✔️ Зато:
+* Кнопка **"Сканировать сети"**
+* Показываются только **известные сети**
+* После выбора:
 
-* стабильно
-* предсказуемо
-* production-ready
+    * подключение
+    * HTTP запрос
+    * показ результата
 
+Анимация:
+
+```
+⏳ Получение данных…
+```
+
+---
+
+## ⚠️ Типовые проблемы
+
+### ❌ Авто режим не стартует после импорта
+
+Причина:
+
+* Wi-Fi был выключен при первом запуске
+* Или нет разрешения LOCATION
+
+Решение:
+
+* Включить Wi-Fi
+* Дать разрешение геолокации
+* Перезапустить AUTO режим
+
+---
+
+### ❌ Wi-Fi scan → empty
+
+В логах:
+
+```
+Wi-Fi permission missing → empty scan
+```
+
+➡️ **100% нет LOCATION разрешения**
+
+---
+
+## 🧪 Логи (очень полезны)
+
+Фильтры в Logcat:
+
+```
+SERVICE
+ORCHESTRATOR
+WIFI_SCAN
+WIFI_CONNECT
+HTTP
+```
+
+---
+
+## 🏁 Итог
+
+Чтобы приложение работало корректно, нужно:
+
+✅ Импортировать JSON
+✅ Дать LOCATION разрешение
+✅ Разрешить HTTP (если не HTTPS)
+✅ Включить Wi-Fi
+✅ Не отключать фоновую работу
+
+┌─────────────┐
+│ MainScreen  │  Jetpack Compose UI
+└──────┬──────┘
+│ AppEvent
+┌──────▼──────┐
+│ MainViewModel│
+│  StateFlow   │
+└───┬────┬────┘
+│    │
+│    └──────────┐
+│               ▼
+│        ImportStateRepository
+│
+┌───▼────────────┐
+│  Orchestrator   │
+│ (business logic)│
+└───┬─────┬───────┘
+│     │
+│     ├── Wi-Fi Scan / Connect
+│     └── HTTP Client
+│
+┌───▼────────────┐
+│ ForegroundSvc  │
+│  (AUTO mode)   │
+└────────────────┘
+
+flowchart TD
+UI[MainScreen<br/>Jetpack Compose]
+VM[MainViewModel<br/>StateFlow]
+ORCH[Orchestrator]
+WIFI[Wi-Fi Manager]
+HTTP[HTTP Client]
+SVC[Foreground Service]
+DATA[Repositories<br/>DataStore / Memory]
+
+    UI -->|AppEvent| VM
+    VM -->|State| UI
+
+    VM --> ORCH
+    VM --> DATA
+
+    ORCH --> WIFI
+    ORCH --> HTTP
+
+    SVC --> ORCH
 

@@ -8,5 +8,6 @@ object LogTags {
     const val WIFI_CONNECT = "WIFI_CONNECT"
     const val HTTP = "HTTP"
     const val FCM = "FCM"
+
     const val RECEIVER = "RECEIVER"
 }

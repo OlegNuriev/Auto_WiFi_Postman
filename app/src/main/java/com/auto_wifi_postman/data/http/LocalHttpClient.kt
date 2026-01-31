@@ -1,6 +1,7 @@
 package com.auto_wifi_postman.data.http
 
 import android.util.Log
+import com.auto_wifi_postman.components.ConnectionResult
 import com.auto_wifi_postman.util.LogTags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,8 +15,9 @@ class LocalHttpClient @Inject constructor() {
         baseUrl: String,
         endpoint: String,
         timeoutMs: Long
-    ): Boolean = withContext(Dispatchers.IO) {
-        try {
+    ): ConnectionResult = withContext(Dispatchers.IO) {
+
+        return@withContext try {
             val url = URL(baseUrl + endpoint)
             val conn = url.openConnection() as HttpURLConnection
 
@@ -25,11 +27,15 @@ class LocalHttpClient @Inject constructor() {
 
             val code = conn.responseCode
             Log.i(LogTags.HTTP, "HTTP code = $code")
-            code in 200..299
+
+            if (code in 200..299) {
+                ConnectionResult.Success
+            } else {
+                ConnectionResult.Failure("HTTP $code")
+            }
         } catch (e: Exception) {
-            Log.e(LogTags.HTTP, "HTTP error", e)
-            false
+            Log.w(LogTags.HTTP, "HTTP failed", e)
+            ConnectionResult.Failure(e.message ?: "Network error")
         }
     }
 }
-

@@ -8,4 +8,5 @@ enum class AgentState {
     HTTP_CHECK,
     DISCONNECT,
     SLEEP
+
 }

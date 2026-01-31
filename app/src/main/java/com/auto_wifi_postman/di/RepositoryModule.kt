@@ -1,20 +1,21 @@
 package com.auto_wifi_postman.di
 
-import com.auto_wifi_postman.data.repository.JsonKnownNetworksRepository
 import com.auto_wifi_postman.data.repository.KnownNetworksRepository
+import com.auto_wifi_postman.data.repository.KnownNetworksRepositoryImpl
+import dagger.Binds
 import dagger.Module
-import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-object RepositoryModule {
+abstract class RepositoryModule {
 
-    @Provides
+    @Binds
     @Singleton
-    fun provideKnownNetworksRepository(
-        impl: JsonKnownNetworksRepository
-    ): KnownNetworksRepository = impl
+    abstract fun bindKnownNetworksRepository(
+        impl: KnownNetworksRepositoryImpl
+    ): KnownNetworksRepository
 }
+
